@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SYSU LMS Remote Assist
 // @namespace    local.sysu.lms.remote-assist
-// @version      0.1.8
+// @version      0.1.9
 // @description  Large on-screen controls for manual remote operation on SYSU LMS. No unattended progress automation.
 // @match        https://lms.sysu.edu.cn/*
 // @grant        none
@@ -23,6 +23,7 @@
   const STYLE_ID = "sysu-lms-remote-assist-style";
   const AUTO_STORAGE_KEY = "sysu-lms-remote-assist-auto";
   const AUTO_STORAGE_MAX_AGE = 6 * 60 * 60 * 1000;
+  const VIDEO_CHECK_INTERVAL = 3000;
   const DEFAULT_STATUS = "手动辅助已开启";
 
   if (document.getElementById(PANEL_ID)) {
@@ -395,6 +396,17 @@
     }, delay);
   }
 
+  function keepVideoPlaying(video) {
+    if (!video || video.ended || !video.paused) {
+      return;
+    }
+
+    video
+      .play()
+      .then(() => showStatus("检测到暂停，已继续播放"))
+      .catch(() => showStatus("检测到暂停，请直接点视频一次"));
+  }
+
   // 判断当前页面是否为讨论区（可根据实际 LMS 结构调整）
   function isDiscussionPage() {
     // 1. URL 包含 forum/discuss 关键词
@@ -422,10 +434,7 @@
         }, 1200);
         return;
       }
-      if (video.paused) {
-        video.play().catch(() => {});
-        showStatus("自动播放中...");
-      }
+      keepVideoPlaying(video);
       const onEnded = () => {
         video.removeEventListener("ended", onEnded);
         if (!isCurrentAutoRun(runId)) return;
@@ -436,7 +445,7 @@
         }, 1200);
       };
       video.addEventListener("ended", onEnded, { once: true });
-      function checkEnded() {
+      function checkVideoState() {
         if (!isCurrentAutoRun(runId)) {
           video.removeEventListener("ended", onEnded);
           return;
@@ -450,9 +459,13 @@
           }, 1200);
           return;
         }
-        runLater(runId, checkEnded, 2000);
+
+        // Periodically recover from accidental pauses, focus changes, or player
+        // UI touches while auto mode is still intentionally enabled.
+        keepVideoPlaying(video);
+        runLater(runId, checkVideoState, VIDEO_CHECK_INTERVAL);
       }
-      runLater(runId, checkEnded, 2000);
+      runLater(runId, checkVideoState, VIDEO_CHECK_INTERVAL);
       return;
     }
     // Discussion pages are non-video activities in this course flow. Skip them
