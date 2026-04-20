@@ -117,19 +117,6 @@ SYSU LMS 的课程页面、视频页面和讨论区页面结构并不完全一�
 node --check lms_remote_assist.user.js
 ```
 
-## 发布建议
-
-如果要发布到 GitHub，可以使用以下仓库描述：
-
-> SYSU LMS userscript for large remote controls, video navigation, discussion skipping, and resilient auto-continue across course pages.
-
-建议仓库名：
-
-```text
-sysu-lms-remote-assist
-```
-
 ## 免责声明
 
 本项目仅用于浏览器端辅助操作，适合远程控制、可访问性增强和个人学习场景。请遵守学校、课程平台和课程教师的相关规定。使用者需要自行确认脚本行为符合所在课程和平台规则。
-
