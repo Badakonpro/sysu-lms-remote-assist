@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SYSU LMS Remote Assist
 // @namespace    local.sysu.lms.remote-assist
-// @version      0.1.9
+// @version      0.2.0
 // @description  Large on-screen controls for manual remote operation on SYSU LMS. No unattended progress automation.
 // @match        https://lms.sysu.edu.cn/*
 // @grant        none
@@ -301,6 +301,7 @@
   let autoMode = false;
   let autoRunId = 0;
   let autoButton = null;
+  let muteButton = null;
 
   function getStoredAutoMode() {
     const storages = [window.sessionStorage, window.localStorage];
@@ -360,6 +361,15 @@
     }
   }
 
+  function setMuteButtonText() {
+    if (!muteButton) {
+      return;
+    }
+
+    const video = getPrimaryVideo();
+    muteButton.textContent = video?.muted ? "取消静音" : "静音";
+  }
+
   function startAutoMode(options = {}) {
     if (autoMode) return;
     autoMode = true;
@@ -396,9 +406,37 @@
     }, delay);
   }
 
+  function muteVideoForAutoMode(video) {
+    if (!video || video.muted) {
+      return;
+    }
+
+    video.muted = true;
+    video.defaultMuted = true;
+    setMuteButtonText();
+    showStatus("自动静音已开启");
+  }
+
+  function toggleMute() {
+    const video = getPrimaryVideo();
+    if (!video) {
+      showStatus("没找到视频");
+      return;
+    }
+
+    video.muted = !video.muted;
+    video.defaultMuted = video.muted;
+    setMuteButtonText();
+    showStatus(video.muted ? "已静音" : "已取消静音");
+  }
+
   function keepVideoPlaying(video) {
     if (!video || video.ended || !video.paused) {
       return;
+    }
+
+    if (autoMode) {
+      muteVideoForAutoMode(video);
     }
 
     video
@@ -426,6 +464,7 @@
       // Video pages: play first, then move to the next activity after the video
       // ends. Both event and polling paths are kept because some embedded
       // players do not reliably dispatch ended events.
+      muteVideoForAutoMode(video);
       if (video.ended) {
         showStatus("视频已结束，跳转下一项...");
         runLater(runId, () => {
@@ -618,6 +657,10 @@
       makeButton("下一项", nextManual)
     );
 
+    muteButton = makeButton("静音", toggleMute);
+    muteButton.className = "remote-assist-secondary";
+    grid.append(muteButton);
+
     // 自动化按钮
     autoButton = makeButton("开始自动进行", () => {
       if (autoMode) {
@@ -637,6 +680,7 @@
     panel.append(header, body);
     document.body.appendChild(panel);
     setAutoButtonText();
+    setMuteButtonText();
 
     restoreAutoMode();
   }
