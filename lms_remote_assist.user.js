@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SYSU LMS Remote Assist
 // @namespace    local.sysu.lms.remote-assist
-// @version      0.2.0
+// @version      0.3.0
 // @description  Large on-screen controls for manual remote operation on SYSU LMS. No unattended progress automation.
 // @match        https://lms.sysu.edu.cn/*
 // @grant        none
@@ -22,6 +22,7 @@
   const PANEL_ID = "sysu-lms-remote-assist";
   const STYLE_ID = "sysu-lms-remote-assist-style";
   const AUTO_STORAGE_KEY = "sysu-lms-remote-assist-auto";
+  const LESSON_COUNT_STORAGE_KEY = "sysu-lms-remote-assist-lesson-count";
   const AUTO_STORAGE_MAX_AGE = 6 * 60 * 60 * 1000;
   const VIDEO_CHECK_INTERVAL = 3000;
   const DEFAULT_STATUS = "手动辅助已开启";
@@ -302,6 +303,9 @@
   let autoRunId = 0;
   let autoButton = null;
   let muteButton = null;
+  let lessonCount = 0;
+  let lessonCountNode = null;
+  let countedLessonKey = null;
 
   function getStoredAutoMode() {
     const storages = [window.sessionStorage, window.localStorage];
@@ -368,6 +372,64 @@
 
     const video = getPrimaryVideo();
     muteButton.textContent = video?.muted ? "取消静音" : "静音";
+  }
+
+  function getStoredLessonCount() {
+    const storages = [window.localStorage, window.sessionStorage];
+    for (const storage of storages) {
+      try {
+        const value = storage.getItem(LESSON_COUNT_STORAGE_KEY);
+        if (value == null) {
+          continue;
+        }
+
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      } catch {
+        // Try the next storage backend.
+      }
+    }
+    return 0;
+  }
+
+  function setStoredLessonCount(value) {
+    const storages = [window.localStorage, window.sessionStorage];
+    for (const storage of storages) {
+      try {
+        storage.setItem(LESSON_COUNT_STORAGE_KEY, String(value));
+      } catch {
+        // Ignore storage write failures and keep the in-memory counter usable.
+      }
+    }
+  }
+
+  function updateLessonCountDisplay() {
+    if (lessonCountNode) {
+      lessonCountNode.textContent = `已刷课程：${lessonCount} 节`;
+    }
+  }
+
+  function incrementLessonCount() {
+    const lessonKey = location.pathname + location.search;
+    if (countedLessonKey === lessonKey) {
+      return;
+    }
+
+    countedLessonKey = lessonKey;
+    lessonCount += 1;
+    setStoredLessonCount(lessonCount);
+    updateLessonCountDisplay();
+    showStatus(`已完成 ${lessonCount} 节课程`);
+  }
+
+  function resetLessonCount() {
+    lessonCount = 0;
+    countedLessonKey = null;
+    setStoredLessonCount(lessonCount);
+    updateLessonCountDisplay();
+    showStatus("已重置课程计数");
   }
 
   function startAutoMode(options = {}) {
@@ -466,6 +528,7 @@
       // players do not reliably dispatch ended events.
       muteVideoForAutoMode(video);
       if (video.ended) {
+        incrementLessonCount();
         showStatus("视频已结束，跳转下一项...");
         runLater(runId, () => {
           nextManual();
@@ -477,6 +540,7 @@
       const onEnded = () => {
         video.removeEventListener("ended", onEnded);
         if (!isCurrentAutoRun(runId)) return;
+        incrementLessonCount();
         showStatus("视频播放完毕，跳转下一项...");
         runLater(runId, () => {
           nextManual();
@@ -491,6 +555,7 @@
         }
         if (video.ended) {
           video.removeEventListener("ended", onEnded);
+          incrementLessonCount();
           showStatus("检测到视频结束，跳转下一项...");
           runLater(runId, () => {
             nextManual();
@@ -661,6 +726,10 @@
     muteButton.className = "remote-assist-secondary";
     grid.append(muteButton);
 
+    const resetCountButton = makeButton("重置计数", resetLessonCount);
+    resetCountButton.className = "remote-assist-secondary";
+    grid.append(resetCountButton);
+
     // 自动化按钮
     autoButton = makeButton("开始自动进行", () => {
       if (autoMode) {
@@ -676,11 +745,16 @@
     status.className = "remote-assist-status";
     status.textContent = DEFAULT_STATUS;
 
-    body.append(grid, status);
+    lessonCountNode = document.createElement("div");
+    lessonCountNode.className = "remote-assist-status";
+
+    body.append(grid, lessonCountNode, status);
     panel.append(header, body);
     document.body.appendChild(panel);
+    lessonCount = getStoredLessonCount();
     setAutoButtonText();
     setMuteButtonText();
+    updateLessonCountDisplay();
 
     restoreAutoMode();
   }
